@@ -83,12 +83,10 @@ def load_obj_local(file_name: str, dataframe: bool = True) -> object:
         if not index:
             index = [c for c in o.columns if c.startswith('Unnamed: ')]
 
-            o.set_index(keys=index, inplace=True)
+            return o.set_index(keys=index)
     else:
         with open(PICKLE_STORE_PATH / file_name, 'rb') as f:
-            o = pickle.load(file=f)
-
-    return o
+            return pickle.load(file=f)
 
 
 def compare_objects(pickle_a: str, pickle_b: str) -> None:
