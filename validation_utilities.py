@@ -1,5 +1,6 @@
 import pickle
 import pathlib
+import warnings
 
 import pandas
 import pandas as pd
@@ -35,13 +36,23 @@ def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
         obj.to_csv(path, compression='gzip')
 
         non_date_dict = obj[[c for c in obj.columns if c not in parse_dates]].dtypes.to_dict()
-        np.save(f"{path}.non_date_dict.npy", non_date_dict, allow_pickle=True)
+        pickle.dump(non_date_dict, open(f"{path}.non_date_dict.pickle", 'wb'))
+        # np.save(f"{path}.non_date_dict.npy", non_date_dict, allow_pickle=True)
 
         # Save date dtypes
         pickle.dump(parse_dates, open(f"{path}.parse_dates.pickle", 'wb'))
 
         # save index
         pickle.dump(obj.index.name, open(f'{path}.index.pickle', 'wb'))
+
+        # test that it will actually work as expected
+        load_obj_local_dtypes = load_obj_local(file_name=file_name).dtypes
+        try:
+            assert all(obj.dtypes == load_obj_local_dtypes)
+        except AssertionError as e:
+            warnings.warn(
+                f'dtype mismatch on reload\nobj.dtypes {obj.dtypes}\n\nload_obj_local.dtypes {load_obj_local_dtypes}')
+            raise e
     else:
         with open(path, 'wb') as f:
             pickle.dump(obj=obj, file=f)
@@ -59,7 +70,7 @@ def load_obj_local(file_name: str, dataframe: bool = True) -> object:
     """
     path = PICKLE_STORE_PATH / file_name
     if dataframe:
-        non_date_dict = np.load(f"{path}.non_date_dict.npy", allow_pickle=True)
+        non_date_dict = pickle.load(open(f"{path}.non_date_dict.pickle", 'rb'))
         parse_dates = pickle.load(open(f"{path}.parse_dates.pickle", 'rb'))
         index = pickle.load(open(f'{path}.index.pickle', 'rb'))
 
