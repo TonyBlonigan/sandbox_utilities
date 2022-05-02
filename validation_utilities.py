@@ -1,14 +1,19 @@
 import pickle
 import pathlib
-import warnings
+import structlog
 
 import pandas
 import pandas as pd
-import numpy as np
 from pandas.testing import assert_frame_equal
+import os
+
+logger = structlog.getLogger(__name__)
 
 PICKLE_STORE_PATH = pathlib.Path('sandbox/pickle_store')
 
+logger.info('setting cache storage path', path=PICKLE_STORE_PATH)
+
+os.makedirs(PICKLE_STORE_PATH, exist_ok=True)
 
 # notes for future object type checking
 # df.equals(other_df)
@@ -28,62 +33,72 @@ def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
 
     """
     assert isinstance(parse_dates, list)
+
     assert isinstance(file_name, str)
+
     path = PICKLE_STORE_PATH / file_name
+
+    logger.info('dumping object', file_name=file_name, parse_dates=parse_dates, path=path)
+
     if type(obj) == pandas.DataFrame:
         # save file
-        # obj.to_pickle(path=PICKLE_STORE_PATH / pickle_name)
-        obj.to_csv(path, compression='gzip')
+        obj.to_csv(path, compression='gzip', index=False)
 
+        # Save metadata necessary for loading
         non_date_dict = obj[[c for c in obj.columns if c not in parse_dates]].dtypes.to_dict()
-        pickle.dump(non_date_dict, open(f"{path}.non_date_dict.pickle", 'wb'))
-        # np.save(f"{path}.non_date_dict.npy", non_date_dict, allow_pickle=True)
 
-        # Save date dtypes
+        pickle.dump(non_date_dict, open(f"{path}.non_date_dict.pickle", 'wb'))
+
         pickle.dump(parse_dates, open(f"{path}.parse_dates.pickle", 'wb'))
 
-        # save index
-        pickle.dump(obj.index.name, open(f'{path}.index.pickle', 'wb'))
+        pickle.dump(type(obj), open(f'{path}.obj_type.pickle', 'wb'))
+
+        # save index for loading
+        pickle.dump(obj.index, open(f'{path}.index.pickle', 'wb'))
 
         # test that it will actually work as expected
-        load_obj_local_dtypes = load_obj_local(file_name=file_name).dtypes
-        try:
-            assert all(obj.dtypes == load_obj_local_dtypes)
-        except AssertionError as e:
-            warnings.warn(
-                f'dtype mismatch on reload\nobj.dtypes {obj.dtypes}\n\nload_obj_local.dtypes {load_obj_local_dtypes}')
-            raise e
+        pd.testing.assert_frame_equal(obj, load_obj_local(file_name=file_name))
+
     else:
         with open(path, 'wb') as f:
             pickle.dump(obj=obj, file=f)
 
 
-def load_obj_local(file_name: str, dataframe: bool = True) -> object:
+def load_obj_local(file_name: str) -> object:
     """
     load the object from local ./sandbox/pickle_store/
     Args:
         file_name: the name of the file to store it
-        dataframe: whether pandas data frame
 
     Returns: the object
 
     """
     path = PICKLE_STORE_PATH / file_name
-    if dataframe:
+
+    object_type = pickle.load(open(f'{path}.obj_type.pickle', 'rb'))
+
+    logger.info('loading object', path=path, object_type=object_type)
+
+    if object_type == pd.DataFrame:
         non_date_dict = pickle.load(open(f"{path}.non_date_dict.pickle", 'rb'))
+
         parse_dates = pickle.load(open(f"{path}.parse_dates.pickle", 'rb'))
+
         index = pickle.load(open(f'{path}.index.pickle', 'rb'))
 
         # Load
         o = pd.read_csv(path, compression='gzip',
                         dtype=non_date_dict,
-                        parse_dates=parse_dates,
-                        index_col=index)
+                        parse_dates=parse_dates)
 
-        if not index:
-            index = [c for c in o.columns if c.startswith('Unnamed: ')]
+        for c in o.columns:
+            if c.startswith('Unnamed: '):
+                o.drop(columns=[c], inplace=True)
 
-            return o.set_index(keys=index)
+        if isinstance(index, pd.Index):
+            o.index = index
+
+        return o
     else:
         with open(PICKLE_STORE_PATH / file_name, 'rb') as f:
             return pickle.load(file=f)
@@ -121,6 +136,21 @@ def compare_objects(pickle_a: str, pickle_b: str) -> None:
         print('data frames a and b are equalß')
 
 
+def stratified_sample_df(df, col, n_samples):
+    n = min(n_samples, df[col].value_counts().min())
+    df_ = df.groupby(col).apply(lambda x: x.sample(n))
+    df_.index = df_.index.droplevel(0)
+    return df_
+
+
 if __name__ == '__main__':
-    compare_objects(pickle_a='load_feats_df.pickle',
-                    pickle_b='load_feats_new_df.pickle')
+    # example script
+    test = pd.DataFrame({'a': [1, 2, 3], 'b': [1., 2., 3.], 'c': ['a', 'b', 'c'],
+                         'd': pd.to_datetime(['2023-01-01', '2023-02-02', '2023-03-03'])})
+
+    dump_obj_local(obj=test, file_name='test', parse_dates=['d'])
+
+    test_a = load_obj_local(file_name='test')
+
+    compare_objects(pickle_a='test',
+                    pickle_b='test')
