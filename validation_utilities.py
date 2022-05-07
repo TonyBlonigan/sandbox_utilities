@@ -63,6 +63,8 @@ def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
         with open(path, 'wb') as f:
             pickle.dump(obj=obj, file=f)
 
+            pickle.dump(type(obj), open(f'{path}.obj_type.pickle', 'wb'))
+
 
 def load_obj_local(file_name: str) -> object:
     """
