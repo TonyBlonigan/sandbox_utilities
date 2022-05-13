@@ -2,15 +2,19 @@ import pickle
 import pathlib
 import structlog
 
-import pandas
-import pandas as pd
-from pandas.testing import assert_frame_equal
+try:
+    import pandas
+    import pandas as pd
+    from pandas.testing import assert_frame_equal
+except ModuleNotFoundError:
+    pass
+
 import os
 import datetime
 
 logger = structlog.getLogger(__name__)
 
-PICKLE_STORE_PATH = pathlib.Path('sandbox/pickle_store')
+PICKLE_STORE_PATH = pathlib.Path('sandbox_utilities/pickle_store')
 
 SUB_DIR = 'user_feats_new'
 
@@ -26,7 +30,7 @@ os.makedirs(PICKLE_STORE_PATH, exist_ok=True)
 
 def dump_obj_local(obj: object, file_name: str, sub_dir: str = SUB_DIR) -> None:
     """
-    store the object in the local ./sandbox/pickle_store/, and test that you can read it and get same obj
+    store the object in the local ./sandbox_utilities/pickle_store/, and test that you can read it and get same obj
 
     Args:
         obj: the object to be pickled
@@ -89,7 +93,7 @@ def get_path(file_name: str, sub_dir: str):
 
 def load_obj_local(file_name: str, sub_dir: str = SUB_DIR) -> object:
     """
-    load the object from local ./sandbox/pickle_store/
+    load the object from local ./sandbox_utilities/pickle_store/
     Args:
         file_name: the name of the file to store it
         sub_dir: directory under the pickle_store to read the file from (default declared in this module)
