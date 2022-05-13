@@ -6,10 +6,13 @@ import pandas
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import os
+import datetime
 
 logger = structlog.getLogger(__name__)
 
 PICKLE_STORE_PATH = pathlib.Path('sandbox/pickle_store')
+
+SUB_DIR = 'user_feats_new'
 
 logger.info('setting cache storage path', path=PICKLE_STORE_PATH)
 
@@ -21,27 +24,32 @@ os.makedirs(PICKLE_STORE_PATH, exist_ok=True)
 # np.allclose(A1, A2)etc
 
 
-def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
+def dump_obj_local(obj: object, file_name: str, sub_dir: str = SUB_DIR) -> None:
     """
-    store the object in the local ./sandbox/pickle_store/
+    store the object in the local ./sandbox/pickle_store/, and test that you can read it and get same obj
+
     Args:
         obj: the object to be pickled
         file_name: the name of the file to store it
-        parse_dates: columns to parse as dates on read
+        sub_dir: directory under the pickle_store to store the file in (default declared as module var)
 
     Returns: None
 
     """
-    assert isinstance(parse_dates, list)
+    path = get_path(file_name, sub_dir)
 
-    assert isinstance(file_name, str)
-
-    path = PICKLE_STORE_PATH / file_name
-
-    logger.info('dumping object', file_name=file_name, parse_dates=parse_dates, path=path)
+    logger.info('dumping object', file_name=file_name, path=path)
 
     if type(obj) == pandas.DataFrame:
         # save file
+
+        # detect date columns
+        parse_dates = list(obj.select_dtypes(include=['datetime', 'datetimetz']).columns)
+
+        for c in obj.select_dtypes(['object']).columns:
+            if isinstance(obj[c].iloc[0], datetime.date):
+                parse_dates.append(c)
+
         obj.to_csv(path, compression='gzip', index=False)
 
         # Save metadata necessary for loading
@@ -57,8 +65,7 @@ def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
         pickle.dump(obj.index, open(f'{path}.index.pickle', 'wb'))
 
         # test that it will actually work as expected
-        pd.testing.assert_frame_equal(obj, load_obj_local(file_name=file_name))
-
+        pd.testing.assert_frame_equal(obj, load_obj_local(file_name=file_name, sub_dir=sub_dir))
     else:
         with open(path, 'wb') as f:
             pickle.dump(obj=obj, file=f)
@@ -66,16 +73,31 @@ def dump_obj_local(obj: object, file_name: str, parse_dates: list = []) -> None:
             pickle.dump(type(obj), open(f'{path}.obj_type.pickle', 'wb'))
 
 
-def load_obj_local(file_name: str) -> object:
+def get_path(file_name: str, sub_dir: str):
+    assert isinstance(file_name, str)
+
+    assert isinstance(sub_dir, str)
+
+    path_sub_dir = PICKLE_STORE_PATH / sub_dir
+
+    os.makedirs(path_sub_dir, exist_ok=True)
+
+    path = path_sub_dir / file_name
+
+    return path
+
+
+def load_obj_local(file_name: str, sub_dir: str = SUB_DIR) -> object:
     """
     load the object from local ./sandbox/pickle_store/
     Args:
         file_name: the name of the file to store it
+        sub_dir: directory under the pickle_store to read the file from (default declared in this module)
 
     Returns: the object
 
     """
-    path = PICKLE_STORE_PATH / file_name
+    path = get_path(file_name, sub_dir)
 
     object_type = pickle.load(open(f'{path}.obj_type.pickle', 'rb'))
 
@@ -102,7 +124,7 @@ def load_obj_local(file_name: str) -> object:
 
         return o
     else:
-        with open(PICKLE_STORE_PATH / file_name, 'rb') as f:
+        with open(path, 'rb') as f:
             return pickle.load(file=f)
 
 
@@ -135,7 +157,7 @@ def compare_objects(pickle_a: str, pickle_b: str) -> None:
 
     if isinstance(obj_a, pd.DataFrame):
         assert_frame_equal(obj_a, obj_b, check_like=True)
-        print('data frames a and b are equalß')
+        print('data frames a and b are equal')
 
 
 def stratified_sample_df(df, col, n_samples):
