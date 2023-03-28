@@ -16,7 +16,7 @@ logger = structlog.getLogger(__name__)
 
 PICKLE_STORE_PATH = pathlib.Path('sandbox_utilities/pickle_store')
 
-SUB_DIR = 'user_feats_new'
+SUB_DIR = 'previous_two_week_simulation'
 
 logger.info('setting cache storage path', path=PICKLE_STORE_PATH)
 
